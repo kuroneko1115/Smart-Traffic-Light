@@ -1,0 +1,149 @@
+#include "Arduino.h"
+#include "SoftwareSerial.h"    //input library Software Serial
+#include "usbhost.h"
+
+//Setup Sensor Laser
+int laser[4] = {3, 4, 5, 6};
+int detect[4] = {46, 48, 50, 52};
+int action[4] = {2, 5, 8, 28};
+int greens = 0;
+bool yellows = false;
+
+//LEDsetup
+int light_signal[4][3] = {
+  {22, 24, 26},
+  {28, 30, 32},
+  {34, 36, 38},
+  {40, 42, 44}
+};
+
+//SetupDelay
+int redDelay=5000;
+int yellowDelay = 2000;
+
+long timeBefore = 0;
+long timeAfter = 0;
+
+void setup(){
+  Serial.begin(9600);
+  Serial.println("Starting system");
+  for(int i = 0; i<4; i++){
+    // Laser sensor code
+    pinMode(laser[i], OUTPUT);
+    pinMode(detect[i], INPUT);
+    pinMode(action[i], OUTPUT);
+    for(int j = 0; j<3; j++){
+      //Set Led to Output
+      pinMode(light_signal[i][j], OUTPUT);
+    }
+  }
+  //USB
+  if (Usb.Init() == -1){
+    Serial.println("OSC did not start.");
+  }
+  delay( 200 );
+  Hid.SetReportParser(0, &Prs);
+  
+  timeBefore = millis();
+  timeAfter = timeBefore;
+  trafficLight(false);
+  onLaser();
+}
+
+void loop() {
+  Usb.Task();
+  if(!darurat){
+    changeTraffic();
+    onDetect(greens);
+  }else{
+    doSome();
+  }
+}
+//======================================================================================Fungsi-Fungsi==========================================================================================
+//function fo traffic light>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+void trafficLight(bool x){
+  if(x){
+    digitalWrite(light_signal[greens][0],LOW);
+    digitalWrite(light_signal[greens][1],HIGH);
+    digitalWrite(light_signal[(greens+1)][2],LOW);
+    digitalWrite(light_signal[(greens+1)][1],HIGH);
+//    for(int i = 0; i<4; i++){
+//      digitalWrite(light_signal[i][0], LOW);
+//      digitalWrite(light_signal[i][1], HIGH);
+//      digitalWrite(light_signal[i][2], LOW);
+//    }
+  }else{
+    for(int i = 0; i<4; i++){
+      digitalWrite(light_signal[i][1], LOW);
+      if(i == greens){
+        digitalWrite(light_signal[i][0], LOW);
+        digitalWrite(light_signal[i][2], HIGH);
+      }else{
+        digitalWrite(light_signal[i][0], HIGH);
+        digitalWrite(light_signal[i][2], LOW);
+      }
+    }
+  }
+}
+//function for countdown delay>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+void changeTraffic(){
+  timeBefore = millis();
+  if(yellows){
+    if(timeBefore - timeAfter>=yellowDelay){
+      timeAfter = timeBefore;
+      greens++;
+      if(greens>3){
+        greens = 0;
+      }
+      trafficLight(false);
+      yellows = false;
+    }
+  }else{
+    if(timeBefore - timeAfter>=redDelay){
+      timeAfter = timeBefore;
+      offAction();
+      trafficLight(true);
+      yellows = true;
+    }
+  }
+}
+//function for laser sensor>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+void onLaser(){
+  for(int i = 0; i<4; i++){
+    digitalWrite(laser[i], HIGH);
+  }
+}
+//function for laser recevier>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+void onDetect(int x){
+  for(int i = 0; i<4; i++){
+    if(i!=greens){
+      int detected = digitalRead(detect[i]);
+      if( detected == HIGH){
+        digitalWrite(action[i],HIGH);
+        Serial.println("Detected!"+String(i));
+      }
+    }
+  }
+}
+//function for off Action>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+void offAction(){
+  for(int i = 0; i<4; i++){
+    digitalWrite(action[i], LOW);
+  }
+}
+//function for emergency vehicle>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+void doSome(){
+  for(int i = 0; i<4; i++){
+    if(i == 0){
+      digitalWrite(light_signal[i][0], HIGH);
+      digitalWrite(light_signal[i][1], LOW);
+      digitalWrite(light_signal[i][2], LOW);
+    }else{
+      digitalWrite(light_signal[i][0], LOW);
+      digitalWrite(light_signal[i][1], LOW);
+      digitalWrite(light_signal[i][2], HIGH);
+    }
+  }
+  delay(5000);
+  darurat=false;
+}
